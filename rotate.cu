@@ -15,21 +15,9 @@ using namespace cv;
 
 
 #define TILE_WIDTH 32
-#define BLOCK_ROWS 8
+
 
 __global__ void rotate(int *a, int *c, int rows, int cols)
-{
-    int x = threadIdx.x + blockIdx.x*blockDim.x;
-    int y = threadIdx.y + blockIdx.y*blockDim.y;
-
-    int aInd = (cols - x) * cols + y;
-    int cInd = y * rows + x;
-
-    if (aInd < rows * cols)
-        c[cInd] = a[aInd];
-}
-
-__global__ void rotateOpt(int *a, int *c, int rows, int cols)
 {
     __shared__ int tile[TILE_WIDTH][TILE_WIDTH + 1];
 
@@ -93,10 +81,6 @@ int main(void)
 
     cudaEventRecord(startCUDA, 0);
 
-    // (N + 511) / 512, 512
-    //rotate<<<dim3((image.rows + 31) / 32, (image.cols + 31) / 32), dim3(32, 32, 1) >>>
-    //  (dev_a, dev_c, image.rows, image.cols);
-
     dim3 dimGrid((image.cols + TILE_WIDTH - 1) / TILE_WIDTH,
         (image.rows + TILE_WIDTH - 1) / TILE_WIDTH,
         1
@@ -105,7 +89,7 @@ int main(void)
     // BLOCK_ROWS
     dim3 dimBlock(TILE_WIDTH, TILE_WIDTH, 1);
 
-    rotateOpt<<<dimGrid, dimBlock >>>(dev_a, dev_c, image.rows, image.cols);
+    rotate<<<dimGrid, dimBlock >>>(dev_a, dev_c, image.rows, image.cols);
 
     cudaEventRecord(stopCUDA, 0);
     cudaEventSynchronize(stopCUDA);
@@ -118,8 +102,6 @@ int main(void)
 
     Mat img2(image.cols, image.rows, image.type());
 
-    //for(int i = 0; i < N; i++)
-    //  host_a[i] = 0;
     CHECK(cudaMemcpy(img2.data, dev_c, N * sizeof(int), cudaMemcpyDeviceToHost));
 
     CHECK(cudaFree(dev_a));
